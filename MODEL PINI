@@ -1,0 +1,66 @@
+package p2pchat.model;
+
+import java.io.*;
+import java.net.*;
+
+// Interfaze txiki bat definitzen dugu, Modeloak Controller-ari abisatzeko mezu bat iristen denean
+// Hau "Observer" patroiaren antzekoa da.
+public interface MessageListener {
+    void onMessageReceived(String message);
+}
+
+public class ChatModel {
+    // Sareko aldagaia
+    private Socket socket;
+    private PrintWriter out;      // Idatzi (Character Stream) [cite: 2224]
+    private BufferedReader in;    // Irakurri (Buffered Stream) [cite: 2237]
+    private MessageListener listener;
+
+    // Mezuak entzuteko "listener" bat erregistratu
+    public void setMessageListener(MessageListener listener) {
+        this.listener = listener;
+    }
+
+    // ZERBITZARIA abiarazi
+    public void startServer(int port) throws IOException {
+        ServerSocket serverSocket = new ServerSocket(port);
+        // accept() metodoa blokeatzailea da, horregatik hari batean exekutatuko da Controllerretik
+        this.socket = serverSocket.accept(); 
+        setupStreams();
+    }
+
+    // BEZEROA konektatu
+    public void connectToClient(String ip, int port) throws IOException {
+        this.socket = new Socket(ip, port);
+        setupStreams();
+    }
+
+    // Stream-ak (Fluxuak) hasieratu [cite: 2164]
+    private void setupStreams() throws IOException {
+        out = new PrintWriter(socket.getOutputStream(), true);
+        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        
+        // Mezuak entzuteko HARI (Thread) berri bat sortu [cite: 3136]
+        // Hau ezinbestekoa da interfazea ez blokeatzeko irakurtzen ari garen bitartean
+        new Thread(() -> {
+            try {
+                String inputLine;
+                // readLine() blokeatzailea da [cite: 2256]
+                while ((inputLine = in.readLine()) != null) {
+                    if (listener != null) {
+                        listener.onMessageReceived(inputLine);
+                    }
+                }
+            } catch (IOException e) {
+                if (listener != null) listener.onMessageReceived("Sistema: Konexioa galdu da.");
+            }
+        }).start(); // Haria abiarazi [cite: 3182]
+    }
+
+    // Mezua bidali
+    public void sendMessage(String message) {
+        if (out != null) {
+            out.println(message); // Line-Oriented I/O [cite: 2263]
+        }
+    }
+}
