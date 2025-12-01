@@ -1,0 +1,69 @@
+package txatapp;
+
+import javax.swing.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+public class TxatKontroladorea {
+    private final List<Mezua> messages = new ArrayList<>();
+    private final TxatUI view;
+    private final Random rnd = new Random();
+    private Timer incomingTimer;
+
+    public TxatKontroladorea(TxatUI view) {
+        this.view = view;
+    }
+
+    public void start() {
+        incomingTimer = new Timer(5000, e -> simulateIncoming());
+        incomingTimer.setInitialDelay(7000);
+        incomingTimer.start();
+    }
+
+    public void stop() {
+        if (incomingTimer != null) incomingTimer.stop();
+    }
+
+    // View-ak inbokatu mezua bidali denean
+    public void bidaliMezua(String text) {
+        if (text == null) return;
+        String trimmed = text.trim();
+        if (trimmed.isEmpty()) return;
+
+        Mezua m = new Mezua(trimmed, Mezua.Direction.SENT);
+        m.setStatus(Mezua.Status.SENDING);
+        messages.add(m);
+
+        // Bista aktualizatu
+        view.addMessageToView(m);
+
+        // Bidalketa egin dela ziurtatu
+        SwingUtilities.invokeLater(() -> {
+            m.setStatus(Mezua.Status.SENT);
+            view.updateMessageStatus(m);
+        });
+    }
+
+    // Ausazko mezu bat simulatu
+    private final String[] sampleReplies = {
+        "Ados, ondo ikusten dut.",
+        "Oraintxe nabil horretan.",
+        "Eskerrik asko. Begirada bat botako diot.",
+        "Aurrerago hitz egin dezakegu?",
+        "Kar-kar, bikaina.",
+        "OK"
+    };
+
+    private void simulateIncoming() {
+        String reply = sampleReplies[rnd.nextInt(sampleReplies.length)];
+        Mezua m = new Mezua(reply, Mezua.Direction.RECEIVED);
+        messages.add(m);
+        view.addMessageToView(m);
+    }
+
+    // Obtener historial (para persistencia o pruebas)
+    public List<Mezua> getMessages() {
+        return new ArrayList<>(messages);
+    }
+}
