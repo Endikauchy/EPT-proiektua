@@ -1,0 +1,248 @@
+/*
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Main.java to edit this template
+ */
+package p2pchat;
+
+/**
+ *
+ * @author a
+ */
+
+import javax.swing.*; // Interfaze grafikorako osagaiak (Leihoak, botoiak...)
+import javax.swing.border.EmptyBorder; // Ertzak eta marjinak kudeatzeko
+import java.awt.*; // Diseinu grafiko orokorra (Koloreak, iturriak...)
+import java.awt.event.ActionEvent; // Botoiak sakatzean gertatzen diren ekintzak
+import java.awt.event.ActionListener; // Ekintza horiek entzuteko interfazea
+import java.io.*; // Datuak irakurtzeko eta idazteko (Input/Output)
+import java.net.*; // Sarea kudeatzeko (Sockets, ServerSockets)
+import java.text.SimpleDateFormat; // Data eta ordua formatu egokian jartzeko
+import java.util.Date; // Uneko data lortzeko
+
+// Klase nagusia, JFrame-tik heredatzen duena leiho bat izateko
+public class P2PChat extends JFrame {
+
+    // --- GUI OSAGAIAK (Interfaze Grafikoa) ---
+    private JTextArea chatArea; // Mezuak bistaratuko diren eremua
+    private JTextField messageInput; // Mezuak idazteko eremua
+    private JButton sendButton; // Bidaltzeko botoia
+    private JList<String> contactList; // Ezkerreko kontaktuen zerrenda
+    
+    // --- SAREKO OSAGAIAK (Networking) ---
+    private ServerSocket serverSocket; // Konexioak onartzeko (Zerbitzari moduan)
+    private Socket socket; // Beste aldearekin komunikatzeko (Bezero/Konexioa)
+    private PrintWriter out; // Mezuak bidaltzeko fluxua
+    private BufferedReader in; // Mezuak jasotzeko fluxua
+
+    // Aplikazioaren sarrera puntu nagusia (Main)
+    public static void main(String[] args) {
+        // Swing interfazea hari seguru batean abiarazten dugu
+        SwingUtilities.invokeLater(() -> {
+            try {
+                // Gure txat aplikazioaren instantzia berri bat sortu
+                P2PChat frame = new P2PChat();
+                // Leihoa ikusgarri egin
+                frame.setVisible(true);
+                // Konexioa konfiguratzeko leiho bat ireki hasieran
+                frame.setupConnection();
+            } catch (Exception e) {
+                e.printStackTrace(); // Errorea gertatuz gero, kontsolan erakutsi
+            }
+        });
+    }
+
+    // Eraikitzailea: Leihoaren itxura diseinatzen du
+    public P2PChat() {
+        // Leihoaren izenburua ezarri
+        setTitle("Java P2P Chat - WhatsApp Style");
+        // Leihoa ixten denean programa gelditu dadila
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        // Leihoaren hasierako tamaina (zabalera, altuera)
+        setBounds(100, 100, 800, 500);
+        
+        // Panel nagusia sortu
+        JPanel contentPane = new JPanel();
+        // Ertzak kendu diseinu garbiagoa izateko
+        contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
+        // BorderLayout erabiltzen dugu osagaiak ipar, hego, eki, mendebaldean jartzeko
+        contentPane.setLayout(new BorderLayout(0, 0));
+        // Leihoari panel hau esleitu
+        setContentPane(contentPane);
+
+        // --- EZKERREKO ALDEA (KONTAKTUAK) ---
+        // Kontaktuen zerrendarako datu eredu bat sortu
+        DefaultListModel<String> listModel = new DefaultListModel<>();
+        listModel.addElement("Laguna (Konektatuta)"); // Adibidezko kontaktua
+        listModel.addElement("Taldeko Lana");
+        listModel.addElement("Ama");
+        
+        // JList osagaia sortu ereduarekin
+        contactList = new JList<>(listModel);
+        // Atzeko planoaren kolorea aldatu (WhatsApp antzekoa)
+        contactList.setBackground(new Color(240, 240, 240));
+        // Aukeratutakoa nabarmentzeko
+        contactList.setSelectedIndex(0);
+        
+        // Scroll bat jarri zerrenda luzea bada
+        JScrollPane leftScroll = new JScrollPane(contactList);
+        // Tamaina finkoa eman ezkerreko zutabeari (200 pixel)
+        leftScroll.setPreferredSize(new Dimension(200, 0));
+        
+
+        // --- ESKUINEKO ALDEA (TXATA) ---
+        // Eskuineko panela sortu
+        JPanel rightPanel = new JPanel();
+        rightPanel.setLayout(new BorderLayout(0, 0));
+
+        // Testu eremua (chat historia)
+        chatArea = new JTextArea();
+        chatArea.setEditable(false); // Erabiltzaileak ezin du hemen zuzenean idatzi, bakarrik irakurri
+        chatArea.setFont(new Font("SansSerif", Font.PLAIN, 14)); // Letra tipoa
+        
+        // Scroll bat gehitu chat historiari
+        JScrollPane chatScroll = new JScrollPane(chatArea);
+        // Chat historia eskuineko panelaren erdian jarri
+        rightPanel.add(chatScroll, BorderLayout.CENTER);
+
+        // Beheko barra (Input + Botoia)
+        JPanel inputPanel = new JPanel();
+        inputPanel.setLayout(new BorderLayout());
+        
+        // Idazteko kaxa
+        messageInput = new JTextField();
+        messageInput.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        
+        // "Bidali" botoia
+        sendButton = new JButton("Bidali");
+        sendButton.setBackground(new Color(37, 211, 102)); // WhatsApp berdea
+        sendButton.setForeground(Color.WHITE); // Letra zuria
+        sendButton.setFocusPainted(false); // Klik egitean markoa kentzeko
+        
+        // Osagaiak beheko barran gehitu
+        inputPanel.add(messageInput, BorderLayout.CENTER);
+        inputPanel.add(sendButton, BorderLayout.EAST);
+        
+        // Beheko barra eskuineko panelaren behealdean jarri
+        rightPanel.add(inputPanel, BorderLayout.SOUTH);
+
+        // --- SPLIT PANE (Banatzailea) ---
+        // Leihoa bitan zatitu: Ezkerra eta Eskuma
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, rightPanel);
+        splitPane.setDividerLocation(200); // Banatzailearen posizioa
+        splitPane.setDividerSize(2); // Banatzailearen lodiera fina
+        
+        // Zatiketa nagusia leihoan gehitu
+        contentPane.add(splitPane, BorderLayout.CENTER);
+
+        // --- EKINTZAK (Listeners) ---
+        // Botoia sakatzean mezua bidali
+        sendButton.addActionListener(e -> sendMessage());
+        
+        // Enter tekla sakatzean ere mezua bidali
+        messageInput.addActionListener(e -> sendMessage());
+    }
+
+    // --- KONEXIO LOGIKA ---
+
+    // Hasieran exekutatzen den metodoa erabiltzaileari galdetzeko zer egin nahi duen
+    private void setupConnection() {
+        // Aukerak definitu
+        Object[] options = {"Zerbitzaria izan (Itxaron)", "Konektatu lagunari"};
+        // Elkarrizketa-koadroa erakutsi
+        int choice = JOptionPane.showOptionDialog(this,
+                "Nola konektatu nahi duzu?",
+                "Konexioaren Konfigurazioa",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[0]);
+
+        // Zerbitzaria aukeratu bada
+        if (choice == 0) {
+            // Hari berri batean exekutatu interfazea ez blokeatzeko
+            new Thread(() -> {
+                try {
+                    int port = 5000; // Defektuzko portua
+                    appendToChat(">> Zerbitzaria abiarazten 5000 portuan...");
+                    serverSocket = new ServerSocket(port); // Socket-a ireki
+                    appendToChat(">> Konexioaren zain...");
+                    socket = serverSocket.accept(); // Hemen gelditzen da norbait sartu arte
+                    appendToChat(">> Laguna konektatu da!");
+                    setupStreams(); // Datu fluxuak prestatu
+                } catch (IOException e) {
+                    appendToChat("Errorea zerbitzarian: " + e.getMessage());
+                }
+            }).start();
+        } 
+        // Konektatu (Bezeroa) aukeratu bada
+        else if (choice == 1) {
+            // IP helbidea eskatu
+            String ip = JOptionPane.showInputDialog(this, "Sartu Lagunaren IP helbidea (adib. localhost):");
+            if (ip != null && !ip.trim().isEmpty()) {
+                new Thread(() -> {
+                    try {
+                        appendToChat(">> Konektatzen " + ip + ":5000 helbidera...");
+                        socket = new Socket(ip, 5000); // Zerbitzarira konektatu
+                        appendToChat(">> Konektatuta!");
+                        setupStreams(); // Datu fluxuak prestatu
+                    } catch (IOException e) {
+                        appendToChat("Ezin izan da konektatu: " + e.getMessage());
+                    }
+                }).start();
+            }
+        }
+    }
+
+    // Datuak bidaltzeko eta jasotzeko bideak ireki
+    private void setupStreams() throws IOException {
+        // Bidaltzeko fluxua (autoFlush true jartzen dugu bufferra berehala husteko)
+        out = new PrintWriter(socket.getOutputStream(), true);
+        // Jasotzeko fluxua
+        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+        // Beste hari bat sortu mezuak etengabe entzuteko
+        new Thread(() -> {
+            try {
+                String inputLine;
+                // Begizta infinitua mezuak irakurtzeko konexioa itxi arte
+                while ((inputLine = in.readLine()) != null) {
+                    // Jasotako mezua pantailan erakutsi
+                    appendToChat("Laguna: " + inputLine);
+                }
+            } catch (IOException e) {
+                appendToChat("Konexioa galdu da.");
+            }
+        }).start();
+    }
+
+    // Mezua bidaltzeko metodoa
+    private void sendMessage() {
+        // Testu kaxako edukia hartu
+        String message = messageInput.getText();
+        // Mezu bat badago (ez badago hutsik)
+        if (message != null && !message.trim().isEmpty()) {
+            // Socket-a irekita badago, sare bidez bidali
+            if (out != null) {
+                out.println(message); // Sarean idatzi
+            }
+            // Gure pantailan ere erakutsi (Ni: ...)
+            appendToChat("Ni: " + message);
+            // Idatzi duguna ezabatu kaxatik hurrengorako
+            messageInput.setText("");
+        }
+    }
+
+    // Chat eremuan testua gehitzeko metodo laguntzailea
+    private void appendToChat(String text) {
+        // Swing osagaiak eguneratzeko modu segurua
+        SwingUtilities.invokeLater(() -> {
+            // Ordua lortu
+            String time = new SimpleDateFormat("HH:mm").format(new Date());
+            // Testua eta ordua gehitu, eta lerro jauzia (\n)
+            chatArea.append("[" + time + "] " + text + "\n");
+            // Scroll barra beti behera eraman azken mezua ikusteko
+            chatArea.setCaretPosition(chatArea.getDocument().getLength());
+        });
+    }
+}
