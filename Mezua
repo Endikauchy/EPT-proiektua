@@ -1,0 +1,26 @@
+package txatapp;
+
+import java.time.LocalDateTime;
+
+public class Mezua {
+    public enum Direction { SENT, RECEIVED }
+    public enum Status { SENDING, SENT, DELIVERED, READ }
+
+    private final String text;
+    private final LocalDateTime timestamp;
+    private final Direction direction;
+    private Status status;
+
+    public Mezua(String text, Direction direction) {
+        this.text = text;
+        this.direction = direction;
+        this.timestamp = LocalDateTime.now();
+        this.status = Status.SENT;
+    }
+
+    public String getText() { return text; }
+    public LocalDateTime getTimestamp() { return timestamp; }
+    public Direction getDirection() { return direction; }
+    public Status getStatus() { return status; }
+    public void setStatus(Status status) { this.status = status; }
+}
