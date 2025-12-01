@@ -1,0 +1,19 @@
+package p2pchat;
+
+import p2pchat.controller.ChatController;
+import p2pchat.model.ChatModel;
+import p2pchat.view.ChatView;
+import javax.swing.SwingUtilities;
+
+public class Main {
+    public static void main(String[] args) {
+        // Swing interfazea hari seguru batean sortu [cite: 850]
+        SwingUtilities.invokeLater(() -> {
+            ChatModel model = new ChatModel();
+            ChatView view = new ChatView();
+            
+            ChatController controller = new ChatController(view, model);
+            controller.hasi();
+        });
+    }
+}
