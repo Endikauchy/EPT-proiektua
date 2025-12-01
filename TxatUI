@@ -109,6 +109,10 @@ public class TxatUI extends JFrame {
             // Asegurar que el viewport haga visible ese rectángulo
             JViewport viewport = scrollPane.getViewport();
             viewport.scrollRectToVisible(rect);
+
+            //Scroll automatikoa
+            JScrollBar vertical = scrollPane.getVerticalScrollBar();
+            vertical.setValue(vertical.getMaximum());
         });
 
         }
