@@ -1,0 +1,70 @@
+package p2pchat.controller;
+
+import p2pchat.model.ChatModel;
+import p2pchat.view.ChatView;
+
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.IOException;
+
+public class ChatController {
+    private ChatView view;
+    private ChatModel model;
+
+    public ChatController(ChatView view, ChatModel model) {
+        this.view = view;
+        this.model = model;
+
+        // 1. Bistako ekintzak entzun (Delegation Event Model) [cite: 1126]
+        this.view.addSendListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                bidaliMezua();
+            }
+        });
+
+        // 2. Modeloaren mezuak entzun (Callback/Listener)
+        this.model.setMessageListener(mezua -> {
+            view.appendMessage("Laguna: " + mezua);
+        });
+    }
+
+    // Aplikazioa hasteko logika
+    public void hasi() {
+        view.setVisible(true); // Leihoa erakutsi [cite: 846]
+        konektatu();
+    }
+
+    private void konektatu() {
+        int aukera = view.showConnectionDialog();
+        
+        // Sarea blokeatzailea denez, Hari (Thread) batean egiten dugu [cite: 3136]
+        new Thread(() -> {
+            try {
+                if (aukera == 0) { // Zerbitzaria
+                    view.appendMessage(">> Zerbitzaria abiarazten...");
+                    model.startServer(5000);
+                    view.appendMessage(">> Konektatuta!");
+                } else if (aukera == 1) { // Bezeroa
+                    String ip = view.askForIP();
+                    if (ip != null) {
+                        view.appendMessage(">> Konektatzen " + ip + "...");
+                        model.connectToClient(ip, 5000);
+                        view.appendMessage(">> Konektatuta!");
+                    }
+                }
+            } catch (IOException e) {
+                view.appendMessage("Errorea: " + e.getMessage()); // Exception Handling [cite: 1]
+            }
+        }).start();
+    }
+
+    private void bidaliMezua() {
+        String text = view.getInputText();
+        if (text != null && !text.trim().isEmpty()) {
+            model.sendMessage(text);     // Modeloari agindu
+            view.appendMessage("Ni: " + text); // Bista eguneratu
+            view.clearInput();
+        }
+    }
+}
