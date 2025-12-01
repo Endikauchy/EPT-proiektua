@@ -1,0 +1,106 @@
+package p2pchat.view;
+
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import java.awt.*;
+import java.awt.event.ActionListener;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+public class ChatView extends JFrame {
+    
+    // Osagaiak
+    private JTextArea chatArea;
+    private JTextField messageInput;
+    private JButton sendButton;
+    private JList<String> contactList;
+
+    public ChatView() {
+        setTitle("Java P2P Chat - MVC Egitura");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setBounds(100, 100, 800, 500);
+        
+        // Layout Managers[cite: 951]: BorderLayout erabiltzen dugu
+        JPanel contentPane = new JPanel();
+        contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
+        contentPane.setLayout(new BorderLayout(0, 0));
+        setContentPane(contentPane);
+
+        // --- EZKERRA ---
+        DefaultListModel<String> listModel = new DefaultListModel<>();
+        listModel.addElement("Laguna (Aktiboa)");
+        listModel.addElement("Taldea");
+        contactList = new JList<>(listModel);
+        contactList.setSelectedIndex(0);
+        contactList.setBackground(new Color(240, 240, 240));
+        JScrollPane leftScroll = new JScrollPane(contactList);
+        leftScroll.setPreferredSize(new Dimension(200, 0));
+
+        // --- ESKUMA (Txata) ---
+        JPanel rightPanel = new JPanel(new BorderLayout());
+        
+        chatArea = new JTextArea();
+        chatArea.setEditable(false);
+        chatArea.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        JScrollPane chatScroll = new JScrollPane(chatArea);
+        rightPanel.add(chatScroll, BorderLayout.CENTER);
+
+        // Input gunea
+        JPanel inputPanel = new JPanel(new BorderLayout());
+        messageInput = new JTextField();
+        messageInput.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        
+        sendButton = new JButton("Bidali");
+        sendButton.setBackground(new Color(37, 211, 102));
+        sendButton.setForeground(Color.WHITE);
+        
+        inputPanel.add(messageInput, BorderLayout.CENTER);
+        inputPanel.add(sendButton, BorderLayout.EAST);
+        rightPanel.add(inputPanel, BorderLayout.SOUTH);
+
+        // SplitPane
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, rightPanel);
+        splitPane.setDividerLocation(200);
+        contentPane.add(splitPane, BorderLayout.CENTER);
+    }
+
+    // --- METODO PUBLIKOAK CONTROLLER-AK ERABILTZEKO ---
+
+    public String getInputText() {
+        return messageInput.getText();
+    }
+
+    public void clearInput() {
+        messageInput.setText("");
+    }
+
+    // Delegation Event Model[cite: 1126]: Bistak ez du kudeatzen, entzule bat onartzen du
+    public void addSendListener(ActionListener listener) {
+        sendButton.addActionListener(listener);
+        messageInput.addActionListener(listener);
+    }
+
+    public void appendMessage(String message) {
+        // Swing hari seguruan exekutatu [cite: 850]
+        SwingUtilities.invokeLater(() -> {
+            String time = new SimpleDateFormat("HH:mm").format(new Date());
+            chatArea.append("[" + time + "] " + message + "\n");
+            chatArea.setCaretPosition(chatArea.getDocument().getLength());
+        });
+    }
+
+    // Konexio leihoa erakusteko metodoa
+    public int showConnectionDialog() {
+        Object[] options = {"Zerbitzaria izan", "Konektatu"};
+        return JOptionPane.showOptionDialog(this,
+                "Nola konektatu nahi duzu?",
+                "Konexioaren Konfigurazioa",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null, options, options[0]);
+    }
+
+    public String askForIP() {
+        return JOptionPane.showInputDialog(this, "Sartu Lagunaren IP helbidea:");
+    }
+}
