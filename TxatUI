@@ -1,0 +1,135 @@
+package txatapp;
+
+import javax.swing.*;
+import java.awt.*;
+import java.time.format.DateTimeFormatter;
+
+public class TxatUI extends JFrame {
+    private final JPanel chatPanel;
+    private final JScrollPane scrollPane;
+    private final JTextArea inputArea;
+    private final JButton sendButton;
+    private TxatKontroladorea controller;
+
+    public TxatUI() {
+        super("MVC Txat");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setMinimumSize(new Dimension(420, 640));
+        setLayout(new BorderLayout());
+
+        // Izenburua
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+        JLabel title = new JLabel("MVC kontaktua");
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 16f));
+        header.add(title, BorderLayout.WEST);
+        add(header, BorderLayout.NORTH);
+
+        // Txat panela
+        chatPanel = new JPanel();
+        chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
+        chatPanel.setBackground(new Color(245, 245, 245));
+        scrollPane = new JScrollPane(chatPanel, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        add(scrollPane, BorderLayout.CENTER);
+
+        // Sarrera
+        JPanel inputPanel = new JPanel(new BorderLayout(8,0));
+        inputPanel.setBorder(BorderFactory.createEmptyBorder(8,12,8,12));
+        inputArea = new JTextArea(3, 20);
+        inputArea.setLineWrap(true);
+        inputArea.setWrapStyleWord(true);
+        JScrollPane inputScroll = new JScrollPane(inputArea, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        sendButton = new JButton("Bidali");
+        inputPanel.add(inputScroll, BorderLayout.CENTER);
+        inputPanel.add(sendButton, BorderLayout.EAST);
+        add(inputPanel, BorderLayout.SOUTH);
+
+        // Key bindings: Enter bidali, Shift+Enter lerro berria
+        InputMap im = inputArea.getInputMap(JComponent.WHEN_FOCUSED);
+        ActionMap am = inputArea.getActionMap();
+        im.put(KeyStroke.getKeyStroke("ENTER"), "sendMessage");
+        am.put("sendMessage", new AbstractAction() {
+            @Override public void actionPerformed(java.awt.event.ActionEvent e) { sendCurrentText(); }
+        });
+        im.put(KeyStroke.getKeyStroke("shift ENTER"), "insert-break");
+
+        // Button action
+        sendButton.addActionListener(e -> sendCurrentText());
+
+        pack();
+        setLocationRelativeTo(null);
+    }
+
+    // Kontroladorea konektatu
+    public void setController(TxatKontroladorea controller) {
+        this.controller = controller;
+    }
+
+    // Bidalketa 
+    private void sendCurrentText() {
+        String text = inputArea.getText();
+        if (controller != null) controller.bidaliMezua(text);
+        inputArea.setText("");
+        inputArea.requestFocusInWindow();
+    }
+
+    public void addMessageToView(Mezua m) {
+        boolean sentByMe = m.getDirection() == Mezua.Direction.SENT;
+        MezuBurbuila bubble = new MezuBurbuila(m.getText(), sentByMe);
+
+        JPanel line = new JPanel(new BorderLayout());
+        line.setOpaque(false);
+        // 2px goian/behean, 8px ezker/eskuman
+        line.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
+        // BoxLayout-ak mezua eskumarantz luzatzea ekidin
+        line.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel align = new JPanel(new FlowLayout(sentByMe ? FlowLayout.RIGHT : FlowLayout.LEFT, 0, 0));
+        align.setOpaque(false);
+
+        // Burbuila ez luzatzea ekidin
+        bubble.setAlignmentX(sentByMe ? Component.RIGHT_ALIGNMENT : Component.LEFT_ALIGNMENT);
+        // Burbuilaren tamaina maximoa limitatu
+        Dimension max = bubble.getMaximumSize();
+        bubble.setMaximumSize(max);
+
+        align.add(bubble);
+        line.add(align, BorderLayout.CENTER);
+
+        chatPanel.add(line);
+
+        SwingUtilities.invokeLater(() -> {
+            chatPanel.revalidate(); // recalcula layout
+            chatPanel.repaint();
+
+            // Obtener el rect en coordenadas del chatPanel ya revalidado
+            Rectangle rect = line.getBounds();
+
+            // Asegurar que el viewport haga visible ese rectángulo
+            JViewport viewport = scrollPane.getViewport();
+            viewport.scrollRectToVisible(rect);
+        });
+
+        }
+
+
+
+    // ??Actualizar estado visual de un mensaje (placeholder; requiere tracking si quieres localizar la burbuja)
+    public void updateMessageStatus(Mezua m) {
+        // Si quieres mostrar "enviado/entregado", tendrías que mapear Message->componente (ej. HashMap)
+        // Aquí dejamos el método disponible para extenderlo más tarde.
+    }
+
+    // Kontroladorea sortzen duen sarrera puntu nagusia
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch(Exception ignored){}
+            TxatUI ui = new TxatUI();
+            TxatKontroladorea controller = new TxatKontroladorea(ui);
+            ui.setController(controller);
+            controller.start();
+            ui.setVisible(true);
+        });
+    }
+}
