@@ -1,0 +1,175 @@
+/**
+ *
+ * @author ENDIKA
+ */
+import javax.swing.*;
+import java.io.*;
+import java.net.*;
+
+public class ChatControllerImpl implements ChatController {
+    private final ChatSwing view;
+
+    private Socket socket;
+    private BufferedReader in;
+    private PrintWriter out;
+    private String username;  // Tu nombre
+    private String peerName = "Peer";  // Nombre del otro usuario
+
+    public ChatControllerImpl(ChatSwing view) {
+        this.view = view;
+
+        askForConnection();      // Pedir nombre y puerto/IP
+
+        // Mensajes automáticos comentados
+        // startKaixoAutoMessages();
+        // startKaixoAutoMessages2();
+    }
+
+    @Override
+    public void sendMessage(String message) {
+        if (message == null || message.trim().isEmpty()) return;
+
+        // Mostrar mensaje propio
+        view.addMessageBubble(username, message.trim(), true);
+
+        // Enviar al peer si está conectado
+        if (out != null) {
+            out.println(message.trim());
+            out.flush();
+        }
+    }
+
+    /**
+     * Pide nombre de usuario y puerto/IP
+     */
+    private void askForConnection() {
+        JTextField nameField = new JTextField();
+        JTextField addressField = new JTextField();
+
+        Object[] message = {
+            "Nombre de usuario:", nameField,
+            "Puerto (servidor) o IP:Puerto (cliente):", addressField
+        };
+
+        int option = JOptionPane.showConfirmDialog(view, message, "Conexión", JOptionPane.OK_CANCEL_OPTION);
+        if (option != JOptionPane.OK_OPTION) System.exit(0);
+
+        username = nameField.getText().trim();
+        view.setContactName(username);
+
+        String input = addressField.getText().trim();
+        if (username.isEmpty() || input.isEmpty()) {
+            JOptionPane.showMessageDialog(view, "Debes completar ambos campos", "Error", JOptionPane.ERROR_MESSAGE);
+            askForConnection();
+            return;
+        }
+
+        try {
+            if (input.contains(":") && !input.matches("\\d+")) {
+                // Cliente -> IP:Puerto
+                String[] parts = input.split(":");
+                String ip = parts[0];
+                int port = Integer.parseInt(parts[1]);
+                connectAsClient(ip, port);
+            } else {
+                // Servidor -> solo puerto
+                int port = Integer.parseInt(input);
+                startServer(port);
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(view, "Formato inválido. Intenta de nuevo.", "Error", JOptionPane.ERROR_MESSAGE);
+            askForConnection();
+        }
+    }
+
+    private void startServer(int port) {
+        new Thread(() -> {
+            try (ServerSocket server = new ServerSocket(port)) {
+                view.addMessageBubble("Sistema", "Servidor iniciado en el puerto " + port, false);
+
+                socket = server.accept();
+                view.addMessageBubble("Sistema", "Cliente conectado desde " + socket.getInetAddress(), false);
+
+                setupStreams();
+                startMessageListener();
+
+            } catch (IOException e) {
+                e.printStackTrace();
+                JOptionPane.showMessageDialog(view, "Error iniciando servidor", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }).start();
+    }
+
+    private void connectAsClient(String ip, int port) {
+        new Thread(() -> {
+            try {
+                socket = new Socket(ip, port);
+                view.addMessageBubble("Sistema", "Conectado al servidor " + ip + ":" + port, false);
+
+                setupStreams();
+                startMessageListener();
+
+            } catch (IOException e) {
+                e.printStackTrace();
+                JOptionPane.showMessageDialog(view, "Error conectando al servidor", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }).start();
+    }
+
+    private void setupStreams() throws IOException {
+        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        out = new PrintWriter(socket.getOutputStream(), true);
+
+        // Intercambiar nombres
+        out.println(username);         // Enviar mi nombre
+        peerName = in.readLine();      // Recibir nombre del peer
+    }
+
+    private void startMessageListener() {
+        new Thread(() -> {
+            try {
+                String msg;
+                while ((msg = in.readLine()) != null) {
+                    final String message = msg;
+                    SwingUtilities.invokeLater(() ->
+                        view.addMessageBubble(peerName, message, false)
+                    );
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+    /*
+    // Mensajes automáticos de ejemplo
+    private void startKaixoAutoMessages() {
+        Thread autoThread = new Thread(() -> {
+            try {
+                for (int i = 0; i < 10; i++) {
+                    Thread.sleep(1000);
+                    final String message = String.valueOf(i);
+                    SwingUtilities.invokeLater(() -> view.addMessageBubble("Mikel", message, false));
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+        autoThread.start();
+    }
+
+    private void startKaixoAutoMessages2() {
+        Thread autoThread = new Thread(() -> {
+            try {
+                for (int i = 0; i < 10; i++) {
+                    Thread.sleep(i == 0 ? 1500 : 1000);
+                    SwingUtilities.invokeLater(() -> view.addMessageBubble("Erabiltzaile", "Kaixo", true));
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+        autoThread.start();
+    }
+    */
+}
