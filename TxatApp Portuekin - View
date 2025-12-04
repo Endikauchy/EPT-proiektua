@@ -1,0 +1,172 @@
+/**
+ *
+ * @author ENDIKA
+ */
+//Interfazea edo view-a
+
+
+import javax.swing.*;
+import javax.swing.text.*;
+import java.awt.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+public class ChatSwing extends JFrame {
+    private final JPanel chatPanel;
+    private final JTextField inputField;
+    private final JScrollPane scrollPane;
+    private ChatController controller;  // Controlador
+    private JLabel contactNameLabel;     // Para mostrar tu nombre en el header
+
+    public ChatSwing() {
+        // Configurar ventana
+        setTitle("TxatApp");
+        setSize(400, 600);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+
+        // ----- Header -----
+        JPanel header = new JPanel();
+        header.setBackground(new Color(173, 216, 230));
+        header.setPreferredSize(new Dimension(400, 50));
+        header.setLayout(new FlowLayout(FlowLayout.LEFT, 15, 15));
+
+        contactNameLabel = new JLabel("Usuario");
+        contactNameLabel.setForeground(Color.WHITE);
+        contactNameLabel.setFont(new Font("Arial", Font.BOLD, 20));
+        header.add(contactNameLabel);
+
+        add(header, BorderLayout.NORTH);
+
+        // ----- Panel de mensajes -----
+        chatPanel = new JPanel();
+        chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
+        chatPanel.setBackground(Color.WHITE);
+        chatPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+
+        scrollPane = new JScrollPane(chatPanel);
+        scrollPane.setBorder(null);
+        add(scrollPane, BorderLayout.CENTER);
+
+        // ----- Input -----
+        JPanel inputPanel = new JPanel(new BorderLayout());
+        inputPanel.setBackground(Color.WHITE);
+
+        inputField = new JTextField();
+        JButton sendButton = new JButton("Bidali");
+        sendButton.setBackground(new Color(135, 206, 250));
+        sendButton.setForeground(Color.WHITE);
+        sendButton.setFocusPainted(false);
+
+        inputPanel.add(inputField, BorderLayout.CENTER);
+        inputPanel.add(sendButton, BorderLayout.EAST);
+        inputPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+
+        add(inputPanel, BorderLayout.SOUTH);
+
+        // ----- Eventos -----
+        sendButton.addActionListener(e -> enviarDesdeControlador());
+        inputField.addActionListener(e -> enviarDesdeControlador());
+
+        setVisible(true);
+    }
+
+    public void setController(ChatController controller) {
+        this.controller = controller;
+    }
+
+    private void enviarDesdeControlador() {
+        if (controller == null) return;
+        String text = inputField.getText();
+        if (!text.isEmpty()) {
+            controller.sendMessage(text);
+            inputField.setText("");
+        }
+    }
+
+    /**
+     * Actualiza el nombre de usuario en el header
+     */
+    public void setContactName(String name) {
+        contactNameLabel.setText(name);
+    }
+
+    /**
+     * Crear burbujas de mensaje con nombre en negrita y hora al final
+     */
+    public void addMessageBubble(String sender, String message, boolean isUser) {
+        int maxWidth = 250;
+
+        // Obtener hora actual
+        String time = new SimpleDateFormat("HH:mm").format(new Date());
+
+        // Burbuja
+        JPanel bubble = new JPanel();
+        bubble.setLayout(new BorderLayout());
+        bubble.setBackground(isUser ? new Color(220, 248, 198) : new Color(240, 240, 240));
+        bubble.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+
+        // JTextPane para nombre en negrita
+        JTextPane msgPane = new JTextPane();
+        msgPane.setEditable(false);
+        msgPane.setOpaque(false);
+        msgPane.setFont(new Font("Arial", Font.PLAIN, 14)); // Fuente general
+
+        StyledDocument doc = msgPane.getStyledDocument();
+
+        // Estilo para el nombre (negrita)
+        Style styleBold = msgPane.addStyle("Bold", null);
+        StyleConstants.setBold(styleBold, true);
+        StyleConstants.setFontFamily(styleBold, "Arial");
+        StyleConstants.setFontSize(styleBold, 14);
+
+        // Estilo para el mensaje y la hora (normal)
+        Style styleNormal = msgPane.addStyle("Normal", null);
+        StyleConstants.setBold(styleNormal, false);
+        StyleConstants.setFontFamily(styleNormal, "Arial");
+        StyleConstants.setFontSize(styleNormal, 14);
+
+        try {
+            doc.insertString(doc.getLength(), sender + ": ", styleBold);
+            doc.insertString(doc.getLength(), message + "  [" + time + "]", styleNormal);
+        } catch (BadLocationException e) {
+            e.printStackTrace();
+        }
+
+        // Ajustar tamaño
+        msgPane.setSize(new Dimension(maxWidth, Short.MAX_VALUE));
+        Dimension pref = msgPane.getPreferredSize();
+        bubble.add(msgPane, BorderLayout.CENTER);
+        bubble.setMaximumSize(new Dimension(maxWidth, pref.height + 20));
+
+        // Wrapper alineado
+        JPanel wrapper = new JPanel();
+        wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.X_AXIS));
+        wrapper.setBackground(Color.WHITE);
+
+        if (isUser) {
+            wrapper.add(Box.createHorizontalGlue());
+            wrapper.add(bubble);
+        } else {
+            wrapper.add(bubble);
+            wrapper.add(Box.createHorizontalGlue());
+        }
+
+        chatPanel.add(wrapper);
+        chatPanel.add(Box.createVerticalStrut(8));
+        chatPanel.revalidate();
+        chatPanel.repaint();
+
+        JScrollBar vertical = scrollPane.getVerticalScrollBar();
+        vertical.setValue(vertical.getMaximum());
+    }
+
+    // Main
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            ChatSwing chatView = new ChatSwing();
+            ChatController controller = new ChatControllerImpl(chatView);
+            chatView.setController(controller);
+        });
+    }
+}
