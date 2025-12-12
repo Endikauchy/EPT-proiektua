@@ -1,0 +1,7 @@
+/**
+ *
+ * @author ENDIKA
+ */
+public interface ChatController {   //Kontrolagailuaren interfaz-ea
+    void sendMessage(String message);
+ 
