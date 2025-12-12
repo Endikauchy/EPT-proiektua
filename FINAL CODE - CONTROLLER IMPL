@@ -1,0 +1,188 @@
+/**
+ *
+ * @author ENDIKA
+ */
+/**
+ * @author ENDIKA
+ */
+import javax.swing.*;
+import java.io.*;
+import java.net.*;
+
+public class ChatControllerImpl implements ChatController {
+    private final ChatSwing view;
+
+    private Socket socket;
+    private BufferedReader in;
+    private PrintWriter out;
+    private String username;  
+    private String peerName = "Peer";
+
+    private boolean isServer = false;
+
+    public ChatControllerImpl(ChatSwing view) {
+        this.view = view;
+        askForConnection();
+    }
+
+    @Override
+    public void sendMessage(String message) {
+        if (message == null || message.trim().isEmpty()) return;
+
+        view.addMessageBubble(username, message.trim(), true);
+
+        if (out != null) {
+            out.println(message.trim());
+            out.flush();
+        }
+    }
+
+    /**
+     * Pide nombre de usuario y puerto/IP
+     */
+    private void askForConnection() {
+        JTextField nameField = new JTextField();
+        JTextField addressField = new JTextField();
+
+        Object[] message = {
+            "Nombre de usuario:", nameField,
+            "Puerto (servidor) o IP:Puerto (cliente):", addressField
+        };
+
+        int option = JOptionPane.showConfirmDialog(view, message, "Conexión", JOptionPane.OK_CANCEL_OPTION);
+        if (option != JOptionPane.OK_OPTION) System.exit(0);
+
+        username = nameField.getText().trim();
+        view.setContactName("Esperando Conexión: " + username);
+
+        String input = addressField.getText().trim();
+        if (username.isEmpty() || input.isEmpty()) {
+            JOptionPane.showMessageDialog(view, "Debes completar ambos campos", "Error", JOptionPane.ERROR_MESSAGE);
+            askForConnection();
+            return;
+        }
+
+        try {
+            if (input.contains(":") && !input.matches("\\d+")) {
+                // Cliente → IP:Puerto
+                String[] parts = input.split(":");
+                String ip = parts[0];
+                int port = Integer.parseInt(parts[1]);
+                connectAsClient(ip, port);
+            } else {
+                // Servidor → solo puerto
+                int port = Integer.parseInt(input);
+                startServer(port);
+            }
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(view, "El puerto debe ser un número válido.", "Error", JOptionPane.ERROR_MESSAGE);
+            askForConnection();
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(view, "Formato de conexión inválido. Intenta de nuevo.", "Error", JOptionPane.ERROR_MESSAGE);
+            askForConnection();
+        }
+    }
+
+    private void startServer(int port) {
+        new Thread(() -> {
+            try (ServerSocket server = new ServerSocket(port)) {
+                isServer = true;
+               
+                // Obtener la IP real del servidor para notificarla
+                String localIp = InetAddress.getLocalHost().getHostAddress();
+
+                view.addMessageBubble("Sistema",
+                    "Servidor iniciado. Dirección de conexión: " + localIp + ":" + port,
+                    false);
+                view.setContactName("Servidor (" + port + "): Esperando Cliente...");
+
+                socket = server.accept();
+               
+                view.addMessageBubble("Sistema", "Cliente conectado desde " + socket.getInetAddress().getHostAddress(), false);
+
+                setupStreams();
+                startMessageListener();
+
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(view, "Error iniciando servidor o el puerto está en uso.", "Error", JOptionPane.ERROR_MESSAGE);
+                SwingUtilities.invokeLater(() -> view.dispose()); // Cierra la ventana en caso de error fatal
+            }
+        }).start();
+    }
+
+    private void connectAsClient(String ip, int port) {
+        new Thread(() -> {
+            try {
+                view.addMessageBubble("Sistema", "Intentando conectar a " + ip + ":" + port + "...", false);
+               
+                socket = new Socket(ip, port);
+                view.addMessageBubble("Sistema", "Conectado exitosamente.", false);
+
+                isServer = false;
+               
+                setupStreams();
+                startMessageListener();
+
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(view, "Error conectando al servidor. Verifique IP, Puerto y Firewall.", "Error", JOptionPane.ERROR_MESSAGE);
+                SwingUtilities.invokeLater(() -> view.dispose());
+            }
+        }).start();
+    }
+
+    /**
+     * Handshake corregido (evita deadlock) e inicializa streams
+     */
+    private void setupStreams() throws IOException {
+        out = new PrintWriter(socket.getOutputStream(), true);
+        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+        if (isServer) {
+            // Servidor: 1. Recibe nombre del cliente, 2. Envía su nombre
+            peerName = in.readLine();
+            out.println(username);
+        } else {
+            // Cliente: 1. Envía su nombre, 2. Recibe nombre del cliente
+            out.println(username);
+            peerName = in.readLine();
+        }
+       
+        // Actualización de la vista después del handshake (en el EDT)
+        view.setContactName("Chateando con: " + peerName);
+        view.addMessageBubble("Sistema", "Conexión con " + peerName + " establecida.", false);
+    }
+
+    private void startMessageListener() {
+        new Thread(() -> {
+            try {
+                String msg;
+                while ((msg = in.readLine()) != null) {
+                    final String message = msg;
+                    SwingUtilities.invokeLater(() ->
+                        view.addMessageBubble(peerName, message, false)
+                    );
+                }
+               
+                // Si readLine devuelve null, el peer cerró la conexión
+                SwingUtilities.invokeLater(() -> {
+                    view.addMessageBubble("Sistema", peerName + " se ha desconectado. Finalizando chat.", false);
+                    view.setContactName("Desconectado de " + peerName);
+                });
+               
+            } catch (IOException e) {
+                 // Conexión perdida o error de I/O
+                SwingUtilities.invokeLater(() -> {
+                    view.addMessageBubble("Sistema", "Conexión con " + peerName + " perdida de forma inesperada.", false);
+                    view.setContactName("Error de Conexión");
+                });
+            } finally {
+                // Asegurar cierre de recursos
+                try {
+                    if (socket != null && !socket.isClosed()) socket.close();
+                } catch (IOException e) {
+                    // ignore
+                }
+            }
+        }).start();
+    }
+}
