@@ -1,0 +1,228 @@
+
+/**
+ * @author ENDIKA
+ */
+import javax.swing.*;
+import java.io.*;
+import java.net.*;
+
+
+/*txataren kontrolatzailea implementatu. 
+sareko konexioak (server/client socket) eta mezuen bidalketa/jasoketa logika kudeatzeko*/
+public class ChatControllerImpl implements ChatController {
+    private final ChatSwing view; //interfaze grafikoa eguneratu
+
+    //sarea kudeatzeko osagaiak
+    private Socket socket; //konexio socket-a
+    private BufferedReader in; //sarrerako datu-korrontea (jasotzeko)
+    private PrintWriter out; //irteerako datu korrontea (bidaltzeko)
+    
+    //erabiltzailearen eta beste kidearen datuak
+    private String username;  
+    private String peerName = "Peer"; //konexioa ezarri baino lehen erabiliko dugun izena
+
+    private boolean isServer = false; //server edo client bezala ari garen adierazteko 
+
+    
+    
+    
+    /*Eraikitzailea. kontrolatzailea sortu eta elkarrizketa hasieratu
+    parametroak: view --> txat leihoa (chatswing)*/
+    public ChatControllerImpl(ChatSwing view) {
+        this.view = view;
+        askForConnection();
+    }
+
+    
+    /*Erabiltzailearen mezua bidaltzeko logika
+    parametroa: message --> bidali beharreko testua*/
+    @Override
+    public void sendMessage(String message) {
+        if (message == null || message.trim().isEmpty()) return;
+
+        //1. mezua lokalean bistaratu (view-ak burbuila sortu eta eskuinera lerrokatuko du)
+        view.addMessageBubble(username, message.trim(), true);
+//2. mezua sarean zehar bidali
+        if (out != null) {
+            out.println(message.trim()); //mezua socket-etik idatzi
+            out.flush(); //berehala bidali
+        }
+    }
+
+    /*Erabiltzaileari izena eta konexio datuak eskatzeko*/
+    private void askForConnection() {
+        //interfaze elementuak sortu sarrera datuak eskatzeko
+        JTextField nameField = new JTextField();
+        JTextField addressField = new JTextField();
+
+        Object[] message = {
+            "Erabiltzaile-izena:", nameField,
+            "Portua (server) edo IP:Portua (client):", addressField
+        };
+
+        //pop up leihoa datuak eskatzeko
+        int option = JOptionPane.showConfirmDialog(view, message, "Konexioa", JOptionPane.OK_CANCEL_OPTION);
+        if (option != JOptionPane.OK_OPTION) System.exit(0); //ez bada OK sakatzen, aplikazioa itxi
+
+        username = nameField.getText().trim();
+        view.setContactName("Konexioaren zain: " + username);
+
+        String input = addressField.getText().trim();
+        if (username.isEmpty() || input.isEmpty()) {
+            JOptionPane.showMessageDialog(view, "Beharrezkoa da bi eremuak betetzea.", "Errorea!", JOptionPane.ERROR_MESSAGE);
+            askForConnection(); //datuak berriro eskatu
+            return;
+        }
+
+        try {
+            /*sarrera aztertu: 
+            server--> portua bakarrik
+            edo
+            client--> ip:portua 
+            den jakiteko*/
+            if (input.contains(":") && !input.matches("\\d+")) {
+                // bezeroa da--> ip:portua
+                String[] parts = input.split(":"); //ip eta portua banatu
+                String ip = parts[0]; //ip lehenengo zatia
+                int port = Integer.parseInt(parts[1]); //portua bigarren zatia
+                connectAsClient(ip, port);
+            } else {
+                // server--> bakarrik portua
+                int port = Integer.parseInt(input);
+                startServer(port);
+            }
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(view, "Idatzi duzun zenbakia ez da baliogarria.", "Errorea!", JOptionPane.ERROR_MESSAGE);
+            askForConnection();
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(view, "Konexio formatu baliogabea. Saiatu berriro.", "Errorea!", JOptionPane.ERROR_MESSAGE);
+            askForConnection();
+        }
+    }
+
+    
+    /*Txat aplikazioa SERVER bezala hasieratzen du
+    Thread berri batean exekutatzen da, GUIa ez blokeatzeko
+    parametroak: port--> entzun beharreko ataka zenbakia*/
+    private void startServer(int port) {
+        new Thread(() -> { //hari berria hasieratu, ServerSocket blokeatzailea delako
+            try (ServerSocket server = new ServerSocket(port)) {
+                isServer = true;
+               
+                // Server-aren IP helbidea lortu, beste kideari eman ahal izateko
+                String localIp = InetAddress.getLocalHost().getHostAddress();
+
+                
+                //View-an erakutsi sistemaren mezuen bidez.
+                view.addMessageBubble("Sistema",
+                    "Zerbitzaria hasieratuta. Hau da zure konexio helbidea: " + localIp + ":" + port,
+                    false);
+                view.setContactName("Zerbitzaria (" + port + "): Bezeroaren zain...");
+
+                //server.accept() metodoak blokeatu egiten du bezero bat konektatu arte
+                socket = server.accept();
+               
+                view.addMessageBubble("Sistema", "Bezeroa konektatuta " + socket.getInetAddress().getHostAddress() + "-tik.", false);
+
+                setupStreams();
+                startMessageListener();
+
+            } catch (IOException e) {
+                //errorerik badago zerbitzaria hasieratzerakoan:
+                JOptionPane.showMessageDialog(view, "Arazoa zerbitzaria hasierakoan edo portua erabiltzen ari da.", "Errorea!", JOptionPane.ERROR_MESSAGE);
+                SwingUtilities.invokeLater(() -> view.dispose()); // Errore larrien aurrean, lehioa ixten du
+            }
+        }).start();
+    }
+
+    
+    /*Txat aplikazioa CLIENT bezala hasieratzen du
+    Thread berri batean exekutatzen da, GUIa ez blokeatzeko
+    parametroak: port--> zerbitzariaren ataka zenbakia
+    ip--> zerbitzariaren ip helbidea*/
+    private void connectAsClient(String ip, int port) {
+        new Thread(() -> { //hari berri bat sortu, socket konexioa blokeatzailea izan daitekeelako
+            try {
+                view.addMessageBubble("Sistema", ip + ":" + port + "-ra konektatzen...", false);
+               
+                socket = new Socket(ip, port);
+                view.addMessageBubble("Sistema", "Konektatuta zaudete!", false);
+
+                isServer = false;
+               
+                setupStreams();
+                startMessageListener();
+
+            } catch (IOException e) {
+                //errorea konektatzean:
+                JOptionPane.showMessageDialog(view, "Errorea zerbitzarira konektatzean. Egiaztatu IP, Portua eta Firewall-a", "Errorea!", JOptionPane.ERROR_MESSAGE);
+                SwingUtilities.invokeLater(() -> view.dispose());
+            }
+        }).start();
+    }
+
+    /*socket-aren sarrera eta irteera korronteak hasieratu. 
+    bi aldeetako izenak trukatu (Handshake)
+    IOException--> korronteak irekitzean errore bat gertatuz gero hasieratzen da*/
+    private void setupStreams() throws IOException {
+        //irteerako korrontea hasieratu. auto-flush(true) aktibatuta
+        out = new PrintWriter(socket.getOutputStream(), true);
+        //sarrerako korrontea hasieratu buffer baten bidez
+        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+        
+        //---Handshake---
+        
+        if (isServer) {
+            // server: 1. bezeroaren izena jaso, 2. bere izena bidali
+            peerName = in.readLine();
+            out.println(username);
+        } else {
+            // client: 1. bere izena bidali, 2. zerbitzariaren izena jaso
+            out.println(username);
+            peerName = in.readLine();
+        }
+       
+        // bistaren eguneraketa
+        view.setContactName(peerName);
+        view.addMessageBubble("Sistema", peerName + "-rekin txateatzen ari zara.", false);
+    }
+
+    
+    /*Beste kidearen mezuak Socket-etik irakurtzeko hari berri bat hasieratu*/
+    private void startMessageListener() {
+        new Thread(() -> {
+            try {
+                String msg;
+                while ((msg = in.readLine()) != null) { //readLine() metodoa blokeatu mezu bat heldu arte
+                    final String message = msg;
+                    //bista EDT-an eguneratu
+                    SwingUtilities.invokeLater(() ->
+                        view.addMessageBubble(peerName, message, false) //beste kidearen mezua (ezkerrean)
+                    );
+                }
+               
+                // readLine() null bada, beste kideak konexioa itxi du
+                SwingUtilities.invokeLater(() -> {
+                    view.addMessageBubble("Sistema", peerName + " deskonektatu egin da.", false);
+                    view.setContactName(peerName + " (deskonektatuta)");
+                });
+               
+                
+               
+            } catch (IOException e) {
+                 // Konexioa galduta:
+                SwingUtilities.invokeLater(() -> {
+                    view.addMessageBubble("Sistema", peerName + "- rekiko konexioa ustekabean galdu da.", false);
+                    view.setContactName("Konexio arazoa...");
+                });
+            } finally {
+                // Baliabide denak itxi direla ziurtatu
+                try {
+                    if (socket != null && !socket.isClosed()) socket.close();
+                } catch (IOException e) {
+                  //ezer ez egin itxiera-errore bat gertatuz gero
+                }
+            }
+        }).start();
+    }
