@@ -1,0 +1,232 @@
+/**
+ * @author ENDIKA
+ */
+
+
+// Interfazea edo view-a
+
+import javax.swing.*;
+import javax.swing.text.*;
+import java.awt.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.net.InetAddress;
+
+
+/*Erabiltzaile interfazea (UI) sortzen duen klasea*/
+public class ChatSwing extends JFrame { //panel nagusia (burbuilak honi gehitu)
+   
+    private final JPanel chatPanel; //panel nagusia (burbuilak honi gehitu) 
+    private final JTextField inputField; //erabiltzailearen sarrera-eremua
+    private final JScrollPane scrollPane;
+    private ChatController controller; //mezuen logika eta bidalketa kudeatu
+    private JLabel contactNameLabel; //kontaktuaren izena erakutsi
+
+    /*GUI elementuak hasieratu eta diseinua konfiguratu*/
+    public ChatSwing() {
+        
+        // Leihoaren konfigurazioa:
+        setTitle("TxatApp"); //Leihoaren izenburua
+        setSize(400, 600);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+
+        // ----- Goiburukoa -----
+        JPanel header = new JPanel(); 
+        header.setBackground(new Color(173, 216, 230)); //atzeko planoa (urdin argia)
+        header.setPreferredSize(new Dimension(400, 50));
+        header.setLayout(new FlowLayout(FlowLayout.LEFT, 15, 15)); //ezkerrera lerrokatu
+
+        contactNameLabel = new JLabel("Konexioaren zain..."); /*konexioa burutu baino
+                   lehen ez da izenik agertzen header-ean, mezu hau baizik*/
+        contactNameLabel.setForeground(Color.WHITE); //etiketaren kolorea
+        contactNameLabel.setFont(new Font("Arial", Font.BOLD, 20)); //letra mota
+        header.add(contactNameLabel);
+
+        add(header, BorderLayout.NORTH); //goiburukoa goiko partean kokatu
+        
+        
+        // ----- Mezu panela ----
+        chatPanel = new JPanel();
+        
+        //mezuak bertikalki pilatzeko kudeatzailea
+        chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
+        chatPanel.setBackground(Color.WHITE);
+        chatPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0)); //goiko marjina
+
+        scrollPane = new JScrollPane(chatPanel);
+        scrollPane.setBorder(null); //marjinik ez
+        add(scrollPane, BorderLayout.CENTER); //erdian gehitzen da
+
+        
+        
+        // ----- Input eremua -----
+        JPanel inputPanel = new JPanel(new BorderLayout());
+        inputPanel.setBackground(Color.WHITE);
+
+        inputField = new JTextField();
+        JButton sendButton = new JButton("Bidali"); //mezuak bidaltzeko botoia
+        sendButton.setBackground(new Color(135, 206, 250)); // sky blue
+        sendButton.setForeground(Color.WHITE);
+        sendButton.setFocusPainted(false); //foku lerroa ezabatu
+
+        inputPanel.add(inputField, BorderLayout.CENTER); //testu eremua erdian
+        inputPanel.add(sendButton, BorderLayout.EAST); //botoia ekialdean
+        inputPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5)); //marjina
+
+        add(inputPanel, BorderLayout.SOUTH); //sarrera-panela hegoaldean
+
+        // ----- Eventos -----
+        
+        //botoiari klik egitean ala enter sakatzean mezua bidaltzeko
+        sendButton.addActionListener(e -> enviarDesdeControlador());
+        inputField.addActionListener(e -> enviarDesdeControlador());
+
+        setVisible(true);
+    }
+
+    
+    /*parametroa: controller--> Txataren logika kudeatuko duen kontrolatzailea*/
+    public void setController(ChatController controller) {
+        this.controller = controller;
+    }
+
+    
+    /*Input eremuan idatzitako testua hartu eta kontrolatzaileari bidali*/
+    private void enviarDesdeControlador() {
+        if (controller == null) return;
+        String text = inputField.getText();
+        if (!text.isEmpty()) {
+            controller.sendMessage(text);
+            inputField.setText("");
+        }
+    }
+
+    /*Kontaktuaren izena goiburuan eguneratzeko (Edit-Dispatch-Thread-ean exekutatu)
+    parametroa: name --> kontaktuaren izen berria*/
+    public void setContactName(String name) {
+        //Swing GUI-aren eguneraketak EDT-an egon behar dira
+        SwingUtilities.invokeLater(() -> {
+            contactNameLabel.setText(name);
+        });
+    }
+
+    /*Mezu burbuila berriak sortu eta txat-panelera gehitu
+    parametroak: sender--> mezua bidali duenaren izena
+    message--> bidali den testua
+    isUser--> true baldin bada erabiltzaileak bidali du mezua*/
+    
+    public void addMessageBubble(String sender, String message, boolean isUser) {
+        final int maxWidth = 250; //gehienezko zabalera
+        final int padding = 20;
+
+        //Uneko ordua lortu
+        String time = new SimpleDateFormat("HH:mm").format(new Date());
+
+        // Burbuila (mezua edukiko duen panela)
+        JPanel bubble = new JPanel();
+
+        Color bgColor;
+        //sistemako mezuek kolore horia izango dute
+        if (sender.equals("Sistema")) {
+            bgColor = new Color(255, 255, 224);
+            
+        } else { //erabiltzaileak bidaltzen dituen mezuak berdeak, besteak bidaltzen dituenak grisak
+            bgColor = isUser ? new Color(220, 248, 198) : new Color(240, 240, 240);
+        }
+
+       
+        bubble.setBackground(bgColor);
+        bubble.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        bubble.setLayout(new BorderLayout());
+
+        
+        //JTextArea mezuaren edukia erakusteko, lerro-egokitzapena JTextPane-k baino hobeto kudeatzen duelako
+        JTextArea msgArea = new JTextArea();
+        msgArea.setEditable(false); //ezin da editatu
+        msgArea.setOpaque(false); //atzeko plano gardena
+        msgArea.setFont(new Font("Arial", Font.PLAIN, 14));
+        msgArea.setLineWrap(true); // ajuste de linea
+        msgArea.setWrapStyleWord(true); // hitzen arabera ajustatu
+        
+        // --Edukia eta estiloa--
+        String content;
+        if (sender.equals("Sistema")) {
+            content = message;
+            msgArea.setFont(new Font("Arial", Font.ITALIC, 14)); // sistemaren mezuentzat--> letra etzana
+        } else {
+            //igorlea, mezua eta ordua
+            content = sender + ": " + message + " [" + time + "]" ;
+        }
+
+        
+        msgArea.setText(content);
+        
+        
+        // --- burbuilaren tamaina dinamikoki kalkulatu ---
+        
+        // 1. testu-eremuari gehienezko zabalera ezarri
+        msgArea.setSize(new Dimension(maxWidth, Short.MAX_VALUE));
+
+        // 2. testu eta zabaleran oinarritu nahi dugun tamaina kalkulatzeko
+        Dimension pref = msgArea.getPreferredSize();
+
+        // zabalera finala: pref (limitado a maxWidth)+ burbuilaren padding horizontala
+        int finalWidth = Math.min(maxWidth, pref.width) + padding;
+        int finalHeight = pref.height + padding - 5; //padding bertikala egokitu
+
+        bubble.add(msgArea, BorderLayout.CENTER);
+
+        // 3. kalkulatutako tamaina burbuilari aplikatu
+        bubble.setMaximumSize(new Dimension(finalWidth, finalHeight)); 
+        bubble.setMinimumSize(new Dimension(finalWidth, finalHeight));
+        bubble.setPreferredSize(new Dimension(finalWidth, finalHeight));
+
+        
+        /* Wrapper: burbuila lerrokatzeko-->
+        Sistema: mezuak erdian,
+        isUser: mezuak eskuman,
+        Peer: mezuak ezkerrean)*/
+        JPanel wrapper = new JPanel();
+        wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.X_AXIS));
+        wrapper.setBackground(Color.WHITE);
+        wrapper.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+
+        if (sender.equals("Sistema")) {
+            wrapper.add(Box.createHorizontalGlue());
+            wrapper.add(bubble);
+            wrapper.add(Box.createHorizontalGlue());
+        } else if (isUser) {
+            wrapper.add(Box.createHorizontalGlue());
+            wrapper.add(bubble);
+        } else {
+            wrapper.add(bubble);
+            wrapper.add(Box.createHorizontalGlue());
+        }
+
+
+        //burbuila eta tarte bertikala chatpanel-era gehitu
+        chatPanel.add(wrapper);
+        chatPanel.add(Box.createVerticalStrut(8));
+        
+        //interfazea berriro baliozkotu eta margotu
+        chatPanel.revalidate();
+        chatPanel.repaint();
+
+        // automatikoki behera mugitu mezuak agertzen direnean
+        JScrollBar vertical = scrollPane.getVerticalScrollBar();
+        vertical.setValue(vertical.getMaximum());
+    }
+
+    // Main
+    public static void main(String[] args) {
+        //GUIa EDT-an exekutatu
+        SwingUtilities.invokeLater(() -> {
+            ChatSwing chatView = new ChatSwing();
+            
+            // demagun ChatControllerImpl existitzen dela 
+            ChatController controller = new ChatControllerImpl(chatView);
+            chatView.setController(controller);
+        });
+    }
+}
