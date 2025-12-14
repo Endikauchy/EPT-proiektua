@@ -1,0 +1,258 @@
+
+/**
+ * @author ENDIKA
+ */
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionListener;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+/*Erabiltzaile interfazea (UI) sortzen duen klasea*/
+public class ChatSwing extends JFrame { 
+    
+    private final JPanel chatPanel; //panel nagusia (burbuilak honi gehitu) 
+    private final JTextField inputField; //erabiltzailearen sarrera-eremua
+    private final JScrollPane scrollPane;
+    private ChatController controller; //mezuen logika eta bidalketa kudeatu
+    private JLabel contactNameLabel; //kontaktuaren izena erakutsi
+
+    // Emojis zerrenda
+    private final String[] EMOJIS = {
+        "🙂", "😊", "😍", "🥰", "🤩", 
+        "😭", "😂", "😅", "🤔", "😎", 
+        "😩", "😛", "🤤", "😇","💩" ,
+        "✨", "🧡️", "💖","💕", "💔", 
+        "👍", "🔥","💯",  "🎂", "💃"
+
+    };
+
+    /*GUI elementuak hasieratu eta diseinua konfiguratu*/
+    public ChatSwing() {
+        
+        // Leihoaren konfigurazioa:
+        setTitle("TxatApp P2P"); 
+        setSize(400, 600);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+
+        // ----- Goiburukoa -----
+        JPanel header = new JPanel(); 
+        header.setBackground(new Color(173, 216, 230)); // Urdin argia
+        header.setPreferredSize(new Dimension(400, 50));
+        header.setLayout(new FlowLayout(FlowLayout.LEFT, 15, 15)); 
+
+        contactNameLabel = new JLabel("Konexioaren zain..."); 
+        contactNameLabel.setForeground(Color.WHITE); 
+        contactNameLabel.setFont(new Font("Arial", Font.BOLD, 20)); 
+        header.add(contactNameLabel);
+
+        add(header, BorderLayout.NORTH); 
+        
+        
+        // ----- Mezu panela ----
+        chatPanel = new JPanel();
+        chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
+        chatPanel.setBackground(Color.WHITE);
+        chatPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0)); 
+
+        scrollPane = new JScrollPane(chatPanel);
+        scrollPane.setBorder(null); 
+        add(scrollPane, BorderLayout.CENTER); 
+
+        
+        // ----- Input eremua -----
+        JPanel inputPanel = new JPanel(new BorderLayout());
+        inputPanel.setBackground(Color.WHITE);
+
+        inputField = new JTextField();
+        // Emojiak ondo ikusteko letra-tipoa
+        inputField.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 14)); 
+
+        // Panel auxiliar para los botones (derecha)
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        buttonPanel.setOpaque(false);
+
+        // 1. Emoji Botoia sortu
+        JButton emojiButton = new JButton(":)");
+        // ALDAKETA: Ikonoaren tamaina 16tik 14ra txikitu dugu.
+        emojiButton.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 14)); 
+        emojiButton.setBackground(Color.WHITE);
+        emojiButton.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10)); 
+        emojiButton.setFocusPainted(false);
+        emojiButton.setContentAreaFilled(false); 
+        emojiButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        emojiButton.addActionListener(e -> showEmojiMenu(emojiButton));
+
+        // 2. Bidali Botoia sortu
+        JButton sendButton = new JButton("Bidali"); 
+        sendButton.setBackground(new Color(135, 206, 250)); // sky blue
+        sendButton.setForeground(Color.WHITE);
+        sendButton.setFocusPainted(false);
+        sendButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+        // Botoiak panelera gehitu
+        buttonPanel.add(emojiButton);
+        buttonPanel.add(sendButton);
+
+        inputPanel.add(inputField, BorderLayout.CENTER); 
+        inputPanel.add(buttonPanel, BorderLayout.EAST); 
+        inputPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5)); 
+
+        add(inputPanel, BorderLayout.SOUTH); 
+
+        // ----- Eventos -----
+        
+        // Botoiari klik egitean ala enter sakatzean mezua bidaltzeko
+        sendButton.addActionListener(e -> enviarDesdeControlador());
+        inputField.addActionListener(e -> enviarDesdeControlador());
+
+        setVisible(true);
+    }
+
+    // --- Emoji menua erakutsi ---
+    private void showEmojiMenu(Component invoker) {
+        JPopupMenu emojiMenu = new JPopupMenu();
+        
+        // GridLayout: 5 zutabe, lerroak automatikoki
+        emojiMenu.setLayout(new GridLayout(0, 5, 2, 2)); 
+        emojiMenu.setBackground(Color.WHITE);
+        emojiMenu.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
+
+        ActionListener emojiListener = e -> {
+            JButton button = (JButton) e.getSource();
+            inputField.setText(inputField.getText() + button.getText());
+            inputField.requestFocusInWindow(); // Fokoa mantendu
+        };
+
+        for (String emoji : EMOJIS) {
+            JButton emojiBtn = new JButton(emoji);
+            // ALDAKETA: Menuko emojien tamaina 16tik 14ra txikitu dugu.
+            emojiBtn.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 14)); 
+            
+            emojiBtn.setBorderPainted(false);
+            emojiBtn.setFocusPainted(false);
+            emojiBtn.setContentAreaFilled(false);
+            emojiBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            emojiBtn.addActionListener(emojiListener);
+            emojiMenu.add(emojiBtn);
+        }
+        
+        // Menua paketatu tamaina kalkulatzeko
+        emojiMenu.pack();
+        
+        // Menua botoiaren GAINEAN erakutsi (Y negatiboa)
+        emojiMenu.show(invoker, 0, -emojiMenu.getPreferredSize().height);
+    }
+    
+    /*parametroa: controller--> Txataren logika kudeatuko duen kontrolatzailea*/
+    public void setController(ChatController controller) {
+        this.controller = controller;
+    }
+
+    
+    /*Input eremuan idatzitako testua hartu eta kontrolatzaileari bidali*/
+    private void enviarDesdeControlador() {
+        if (controller == null) return;
+        String text = inputField.getText();
+        if (!text.isEmpty()) {
+            controller.sendMessage(text);
+            inputField.setText("");
+        }
+    }
+
+    /*Kontaktuaren izena goiburuan eguneratzeko*/
+    public void setContactName(String name) {
+        SwingUtilities.invokeLater(() -> {
+            contactNameLabel.setText(name);
+        });
+    }
+
+    /*Mezu burbuila berriak sortu eta txat-panelera gehitu*/
+    public void addMessageBubble(String sender, String message, boolean isUser) {
+        final int maxWidth = 250; 
+        final int padding = 20;
+
+        String time = new SimpleDateFormat("HH:mm").format(new Date());
+
+        JPanel bubble = new JPanel();
+
+        Color bgColor;
+        if (sender.equals("Sistema")) {
+            bgColor = new Color(255, 255, 224);
+            
+        } else { 
+            bgColor = isUser ? new Color(220, 248, 198) : new Color(240, 240, 240);
+        }
+
+        bubble.setBackground(bgColor);
+        bubble.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        bubble.setLayout(new BorderLayout());
+        
+        JTextArea msgArea = new JTextArea();
+        msgArea.setEditable(false); 
+        msgArea.setOpaque(false);
+        // Emojiak ondo ikusteko
+        msgArea.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 14)); 
+        msgArea.setLineWrap(true); 
+        msgArea.setWrapStyleWord(true);
+        
+        String content;
+        if (sender.equals("Sistema")) {
+            content = message;
+            msgArea.setFont(new Font("Arial", Font.ITALIC, 14));
+        } else {
+            content = sender + ": " + message + " [" + time + "]" ;
+        }
+
+        msgArea.setText(content);
+        
+        msgArea.setSize(new Dimension(maxWidth, Short.MAX_VALUE));
+        Dimension pref = msgArea.getPreferredSize();
+
+        int finalWidth = Math.min(maxWidth, pref.width) + padding;
+        int finalHeight = pref.height + padding - 5; 
+
+        bubble.add(msgArea, BorderLayout.CENTER);
+
+        bubble.setMaximumSize(new Dimension(finalWidth, finalHeight)); 
+        bubble.setMinimumSize(new Dimension(finalWidth, finalHeight));
+        bubble.setPreferredSize(new Dimension(finalWidth, finalHeight));
+
+        JPanel wrapper = new JPanel();
+        wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.X_AXIS));
+        wrapper.setBackground(Color.WHITE);
+        wrapper.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+
+        if (sender.equals("Sistema")) {
+            wrapper.add(Box.createHorizontalGlue());
+            wrapper.add(bubble);
+            wrapper.add(Box.createHorizontalGlue());
+        } else if (isUser) {
+            wrapper.add(Box.createHorizontalGlue());
+            wrapper.add(bubble);
+        } else {
+            wrapper.add(bubble);
+            wrapper.add(Box.createHorizontalGlue());
+        }
+
+        chatPanel.add(wrapper);
+        chatPanel.add(Box.createVerticalStrut(8));
+        
+        chatPanel.revalidate();
+        chatPanel.repaint();
+
+        JScrollBar vertical = scrollPane.getVerticalScrollBar();
+        vertical.setValue(vertical.getMaximum());
+    }
+
+    // Main
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            ChatSwing chatView = new ChatSwing();
+            ChatController controller = new ChatControllerImpl(chatView);
+            chatView.setController(controller);
+        });
+    }
+}
