@@ -1,0 +1,154 @@
+import java.io.*;
+import java.net.*;
+
+public class ChatModel {
+
+    // --- ENTZULEA (Listener) ---
+    // Modeloak ez daki nor den View-a, beraz, interfaze hau erabiltzen du
+    // "zerbait gertatu dela" abisatzeko.
+    public interface ChatModelListener {
+        void onMessageReceived(String senderName, String message);
+        void onStatusUpdate(String message);
+        void onContactNameUpdate(String name);
+        void onConnectionLost();
+    }
+
+    private ChatModelListener listener;
+
+    // SAREKO OSAGAIAK
+    private Socket socket;
+    private BufferedReader in;
+    private PrintWriter out;
+
+    // EGOERA DATUAK
+    private String username;
+    private String peerName = "Peer";
+    private boolean isServer = false;
+
+    // Listener-a esleitu
+    public void setListener(ChatModelListener listener) {
+        this.listener = listener;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+    
+    public String getUsername() {
+        return username;
+    }
+
+    // --- MEZUA BIDALI ---
+    public void sendMessage(String message) {
+        if (out != null) {
+            out.println(message);
+            out.flush();
+        }
+    }
+
+    // --- ZERBITZARIA ABIARAZI (Haria barne) ---
+    public void startServer(int port) {
+        new Thread(() -> {
+            try (ServerSocket server = new ServerSocket(port)) {
+                isServer = true;
+                String localIp = InetAddress.getLocalHost().getHostAddress();
+
+                // Abisuak listener bidez bidali (ez zuzenean view-ra)
+                notifyStatus("Zerbitzaria hasieratuta. IP: " + localIp + ":" + port);
+                notifyContactName("Bezeroaren zain (" + port + ")...");
+
+                socket = server.accept(); // BLOKEATZAILEA
+                
+                notifyStatus("Bezeroa konektatuta " + socket.getInetAddress().getHostAddress() + "-tik.");
+                
+                setupStreams();
+                startMessageListener();
+
+            } catch (IOException e) {
+                notifyStatus("Errorea zerbitzaria abiaraztean: " + e.getMessage());
+                notifyConnectionLost();
+            }
+        }).start();
+    }
+
+    // --- BEZEROA KONEKTATU (Haria barne) ---
+    public void connectAsClient(String ip, int port) {
+        new Thread(() -> {
+            try {
+                notifyStatus(ip + ":" + port + "-ra konektatzen...");
+                
+                socket = new Socket(ip, port); // BLOKEATZAILEA
+                isServer = false;
+                
+                notifyStatus("Konektatuta!");
+                
+                setupStreams();
+                startMessageListener();
+
+            } catch (IOException e) {
+                notifyStatus("Errorea konektatzean: " + e.getMessage());
+                notifyConnectionLost();
+            }
+        }).start();
+    }
+
+    // --- STREAMS & HANDSHAKE ---
+    private void setupStreams() throws IOException {
+        out = new PrintWriter(socket.getOutputStream(), true);
+        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+        // Handshake (Izen trukea)
+        if (isServer) {
+            peerName = in.readLine();
+            out.println(username);
+        } else {
+            out.println(username);
+            peerName = in.readLine();
+        }
+
+        notifyContactName(peerName);
+        notifyStatus(peerName + "-rekin txateatzen ari zara.");
+    }
+
+    // --- MEZUAK ENTZUN (Haria barne) ---
+    private void startMessageListener() {
+        new Thread(() -> {
+            try {
+                String msg;
+                while ((msg = in.readLine()) != null) {
+                    // Mezua iristean, listener-ari abisatu
+                    if (listener != null) {
+                        listener.onMessageReceived(peerName, msg);
+                    }
+                }
+                // Begiztatik irteten bada, deskonektatu da
+                notifyStatus(peerName + " deskonektatu egin da.");
+                notifyContactName(peerName + " (deskonektatuta)");
+            } catch (IOException e) {
+                notifyStatus("Konexioa galdu da.");
+                notifyConnectionLost();
+            } finally {
+                closeSocket();
+            }
+        }).start();
+    }
+
+    private void closeSocket() {
+        try {
+            if (socket != null && !socket.isClosed()) socket.close();
+        } catch (IOException e) { /* Ignoratu */ }
+    }
+
+    // --- LAGUNTZAILEAK NOTIFIKAZIOETARAKO ---
+    private void notifyStatus(String msg) {
+        if (listener != null) listener.onStatusUpdate(msg);
+    }
+    
+    private void notifyContactName(String name) {
+        if (listener != null) listener.onContactNameUpdate(name);
+    }
+    
+    private void notifyConnectionLost() {
+        if (listener != null) listener.onConnectionLost();
+    }
+}
