@@ -1,0 +1,104 @@
+import javax.swing.*;
+
+public class ChatControllerImpl implements ChatController {
+    
+    private final ChatSwing view;
+    private final ChatModel model; // Orain Model objektu bat daukagu
+
+    public ChatControllerImpl(ChatSwing view) {
+        this.view = view;
+        this.model = new ChatModel();
+        
+        // Modeloko gertaerak entzun eta Bista eguneratu
+        initModelListener();
+        
+        // Konexio leihoa atera
+        askForConnection();
+    }
+
+    // Hemen lotzen dugu Modeloa Bistarekin
+    private void initModelListener() {
+        model.setListener(new ChatModel.ChatModelListener() {
+            @Override
+            public void onMessageReceived(String senderName, String message) {
+                // Modeloak hari batetik deitzen du, guk Swing harira pasatzen dugu
+                SwingUtilities.invokeLater(() -> 
+                    view.addMessageBubble(senderName, message, false)
+                );
+            }
+
+            @Override
+            public void onStatusUpdate(String message) {
+                SwingUtilities.invokeLater(() -> 
+                    view.addMessageBubble("Sistema", message, false)
+                );
+            }
+
+            @Override
+            public void onContactNameUpdate(String name) {
+                SwingUtilities.invokeLater(() -> view.setContactName(name));
+            }
+
+            @Override
+            public void onConnectionLost() {
+                 SwingUtilities.invokeLater(() -> {
+                     view.setContactName("Konexio galdua");
+                     // Nahi izanez gero, hemen leihoa itxi edo berriro konektatzeko eskatu daiteke
+                 });
+            }
+        });
+    }
+
+    @Override
+    public void sendMessage(String message) {
+        if (message == null || message.trim().isEmpty()) return;
+
+        // 1. Bistari esan mezua margotzeko (nirea)
+        view.addMessageBubble(model.getUsername(), message.trim(), true);
+        
+        // 2. Modelari esan mezua bidaltzeko
+        model.sendMessage(message.trim());
+    }
+
+    // Konexioa eskatzeko logika (UI hutsa da hau, Controller-en geratzen da)
+    private void askForConnection() {
+        JTextField nameField = new JTextField();
+        JTextField addressField = new JTextField();
+
+        Object[] message = {
+            "Erabiltzaile-izena:", nameField,
+            "Portua (server) edo IP:Portua (client):", addressField
+        };
+
+        int option = JOptionPane.showConfirmDialog(view, message, "Konexioa", JOptionPane.OK_CANCEL_OPTION);
+        if (option != JOptionPane.OK_OPTION) System.exit(0);
+
+        String user = nameField.getText().trim();
+        String input = addressField.getText().trim();
+
+        if (user.isEmpty() || input.isEmpty()) {
+            JOptionPane.showMessageDialog(view, "Bete eremu guztiak.");
+            askForConnection();
+            return;
+        }
+
+        // Izena modelari pasa
+        model.setUsername(user);
+        view.setContactName("Konexioaren zain: " + user);
+
+        // Erabakia hartu eta Modelari agindu
+        try {
+            if (input.contains(":") && !input.matches("\\d+")) {
+                // CLIENT
+                String[] parts = input.split(":");
+                model.connectAsClient(parts[0], Integer.parseInt(parts[1]));
+            } else {
+                // SERVER
+                model.startServer(Integer.parseInt(input));
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(view, "Formatu okerra.");
+            askForConnection();
+        }
+    }
+}
